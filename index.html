@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Longasia Investment - Investment Performance Tracker</title>
+
+    <!-- PWA / Add to Home Screen Icons (UPDATED) -->
+    <link rel="apple-touch-icon" href="https://i.ibb.co/PsSbfWW9/LA-png.png">
+    <link rel="icon" type="image/png" href="https://i.ibb.co/PsSbfWW9/LA-png.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#000000">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000; /* Pure black background */
+            
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 4rem 2rem; 
+            color: #e2e8f0; /* Default text to light gray */
+            position: relative; /* Needed for pseudo-element positioning */
+        }
+        
+        /* --- PSEUDO-ELEMENT FOR FIXED, FILTERED BACKGROUND --- */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; /* Place behind all content */
+            
+            /* Logo Styling */
+            background-image: url('https://i.ibb.co/SDrwhrFZ/Screenshot-2025-11-14-134406.png'); 
+            background-size: 60%;
+            background-position: center center;
+            background-repeat: no-repeat;
+            
+            /* Apply filter to the background image only */
+            filter: grayscale(100%) opacity(0.02); 
+        }
+        /* --- END PSEUDO-ELEMENT --- */
+
+        /* The content-wrapper is no longer needed to counteract the filter, but we keep it
+           for max-width and centering, so the styles are simplified. */
+        .main-content-wrapper {
+            width: 100%;
+            max-width: 7xl; 
+            position: relative; 
+            z-index: 1; /* Ensure content is above the background layer */
+        }
+
+        /* --- GLASSCARD STYLES (Adapted for Longasia black/white theme) --- */
+        .glass-card {
+            background-color: rgba(255, 255, 255, 0.05); /* Very subtle white transparency */
+            border: 1px solid rgba(255, 255, 255, 0.1); /* Subtle white border */
+            backdrop-filter: blur(10px); 
+            --webkit-backdrop-filter: blur(10px); 
+        }
+        .main-glass-card {
+            /* Main card with a subtle white/light gray gradient for emphasis */
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(15px);
+            --webkit-backdrop-filter: blur(15px);
+        }
+        /* --- END GLASSCARD STYLES --- */
+
+        .projection-table-container {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        /* Custom Keyframe for subtle pulse on the main card */
+        @keyframes subtle-pulse {
+            0%, 100% { box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2); }
+            50% { box-shadow: 0 5px 15px rgba(255, 255, 255, 0.2); /* White glow */ }
+        }
+        .animate-subtle-pulse {
+            animation: subtle-pulse 5s infinite ease-in-out;
+        }
+        .icon {
+            width: 1.25rem; 
+            height: 1.25rem;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 0.5rem;
+        }
+        .table-cell-padding {
+            padding: 0.75rem 1.25rem; 
+        }
+        /* Specific text colors for Longasia theme */
+        .longasia-text-primary { color: #ffffff; /* Pure white for main text */ }
+        .longasia-text-secondary { color: #cbd5e1; /* Light gray for secondary text */ }
+        .longasia-text-accent { color: #facc15; /* A subtle gold/yellow for a high-end feel */ }
+        .longasia-border { border-color: rgba(255, 255, 255, 0.1); }
+        .profit-gain { 
+            color: #00ff00; /* NEON GREEN for gains */ 
+            text-shadow: 0 0 5px #00ff00; /* Optional: adds a subtle glow effect */
+        } 
+        .profit-loss { color: #ef4444; /* Subtle red for losses */ }
+
+        /* Modal specific styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
+        .modal-glass {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(15px);
+            --webkit-backdrop-filter: blur(15px);
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 400px;
+            position: relative;
+        }
+        /* Currency button styles (Removed the active/hover styles since the switcher is gone) */
+        .currency-btn {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 0.75rem;
+            font-weight: 600;
+            color: #ffffff;
+            transition: all 0.2s;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Account Details Modal Structure (UPDATED) -->
+<div id="accountModal" class="modal-overlay hidden">
+    <div class="modal-glass">
+        <h3 class="text-2xl font-bold longasia-text-primary mb-4 border-b longasia-border pb-2">Account Details</h3>
+        <button onclick="window.toggleModal()" class="absolute top-4 right-4 text-xl text-white opacity-70 hover:opacity-100 transition">
+            &times;
+        </button>
+        <div class="space-y-3 text-sm">
+            <p><span class="font-semibold longasia-text-accent">Holder Name:</span> <span class="longasia-text-primary">Hiraman Paunikar</span></p>
+            <p><span class="font-semibold longasia-text-accent">Account Number:</span> <span class="longasia-text-primary">36166754</span></p>
+            <p><span class="font-semibold longasia-text-accent">National ID:</span> <span class="longasia-text-primary">**** **** ****</span></p>
+            <p class="pt-2"><span class="font-semibold longasia-text-accent">Status:</span> <span class="profit-gain font-bold">Verified</span></p>
+        </div>
+    </div>
+</div>
+
+<!-- Main wrapper changed class name and simplified positioning --><div class="main-content-wrapper">
+
+    <div class="glass-card rounded-2xl p-8 md:p-10 
+                shadow-2xl transition duration-500 ease-in-out relative">
+        
+        <!-- Currency Switcher REMOVED -->
+        
+        <!-- Account Circle Button -->
+        <button onclick="window.toggleModal()" class="absolute top-4 right-4 md:top-6 md:right-6 
+                 w-10 h-10 rounded-full bg-white/10 border border-white/20 
+                 flex items-center justify-center text-xl text-white 
+                 hover:bg-white/20 transition duration-300 z-20"
+                 title="Account Details">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 longasia-text-accent">
+                <path fill-rule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.646-7.812-1.7a.75.75 0 0 1-.437-.695Z" clip-rule="evenodd" />
+            </svg>
+        </button>
+        <!-- End Account Circle Button -->
+
+
+        <header class="text-center mb-16">
+            
+            <!-- NEW Large Header Logo Integration --><div class="mb-6">
+                <img src="https://i.ibb.co/bh4rZws/long-asia-png.png" 
+                     alt="Longasia Main Logo" 
+                     onerror="this.onerror=null;this.src='https://placehold.co/200x50/000000/ffffff?text=LONGASIA'"
+                     class="mx-auto w-64 h-auto object-contain transition duration-500 ease-in-out"
+                     />
+            </div>
+            <!-- Removed the old text titles to prioritize the logo image -->
+
+        </header>
+
+        <!-- Current Status Section --><div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            
+            <!-- Card 1: Time Elapsed (Glass Effect) --><div class="glass-card longasia-text-secondary p-5 rounded-xl shadow-xl 
+                        transform hover:scale-[1.05] hover:shadow-white/10 transition duration-500 ease-in-out">
+                <p class="text-sm font-medium flex items-center">
+                    <svg class="icon longasia-text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Time Elapsed
+                </p>
+                <p id="daysElapsed" class="text-4xl font-black mt-1 longasia-text-primary">0</p>
+                <p id="startDateDisplay" class="text-xs mt-2 longasia-text-secondary">Calculated since Loading...</p>
+            </div>
+
+            <!-- Card 2: Current Value (Main Glass Card - Animated) --><div class="main-glass-card longasia-text-primary p-5 rounded-xl shadow-2xl 
+                        animate-subtle-pulse transform hover:scale-[1.05] transition duration-500 ease-in-out">
+                <p class="text-sm font-medium opacity-90 flex items-center">
+                    <svg class="icon longasia-text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 0h8m-8 0H4"></path><path d="M17 5H7M17 19H7"></path></svg>
+                    Current Tracked Value
+                </p>
+                <div class="flex items-baseline mt-1">
+                    <span id="currentValueSymbol" class="text-4xl font-extrabold">₹</span>
+                    <span id="currentValue" class="text-4xl font-black">30,000</span>
+                </div>
+                <!-- Removed currentDateDisplay element --><p class="text-xs mt-2 longasia-text-secondary opacity-80">Real-time performance</p>
+            </div>
+
+            <!-- Card 3: Total Profit (Glass Effect) --><div class="glass-card longasia-text-secondary p-5 rounded-xl shadow-xl
+                        transform hover:scale-[1.05] hover:shadow-white/10 transition duration-500 ease-in-out">
+                <p class="text-sm font-medium flex items-center">
+                     <svg class="icon profit-gain" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M18 6l-9 9-4-4"></path></svg>
+                    Total Profit
+                </p>
+                <div class="flex items-baseline mt-1">
+                    <span id="totalProfitSymbol" class="text-4xl font-extrabold profit-gain">₹</span>
+                    <span id="totalProfit" class="text-4xl font-black profit-gain">0</span>
+                </div>
+                <p id="profitPercent" class="text-xs mt-2 longasia-text-secondary">
+                    <span class="profit-gain">0.00% Gain</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Projections Graph Section (UPDATED) --><h2 class="text-xl font-bold longasia-text-primary mb-4 border-b longasia-border pb-3 uppercase tracking-wide">
+            1 Year Projected Value
+        </h2>
+        <div class="projection-graph-container glass-card rounded-xl p-6 shadow-lg">
+            <div style="height: 350px;">
+                <canvas id="projectionChart"></canvas>
+            </div>
+        </div>
+        <!-- END Projections Graph Section -->
+
+        <!-- Copyright Footer --><footer class="mt-12 pt-6 text-center border-t longasia-border">
+            <p class="text-xs longasia-text-secondary uppercase tracking-wider">
+                2025 &copy; LONG ASIA GROUP
+            </p>
+        </footer>
+
+        <!-- Hidden Firebase Globals (Required for Canvas Environment) --><script>
+            var __app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-sim';
+            var __firebase_config = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+            var __initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+        </script>
+    </div><!-- End of main glass-card container --></div><!-- End of main-content-wrapper --><script type="module">
+    // --- Chart Instance Variable ---
+    let projectionChartInstance = null; 
+
+    // --- Investment Constants (INR Base) ---
+    const INITIAL_PRINCIPAL_INR = 30000; // Reset to 30,000
+    const MONTHLY_RATE = 0.05; // Reset to 5%
+    const DAYS_IN_MONTH = 30; // Set to 30 days exactly
+    
+    // Calculate required daily profit amount
+    const DAILY_PROFIT = (INITIAL_PRINCIPAL_INR * MONTHLY_RATE) / DAYS_IN_MONTH; // (30000 * 0.05) / 30 = 50 INR/day
+    
+    // Calculate new FIXED_START_DATE_OBJ to be TODAY
+    const today = new Date();
+    const FIXED_START_DATE_OBJ = today; 
+    
+    const FIXED_START_DATE_STR = FIXED_START_DATE_OBJ.toLocaleDateString('en-US');
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const PROFIT_PER_MS = DAILY_PROFIT / MS_PER_DAY; 
+
+    const CURRENCY_SYMBOL = '₹';
+    
+    // --- DOM Elements ---
+    const daysElapsedEl = document.getElementById('daysElapsed');
+    const currentValueEl = document.getElementById('currentValue');
+    const totalProfitEl = document.getElementById('totalProfit');
+    const profitPercentEl = document.getElementById('profitPercent');
+    const startDateDisplayEl = document.getElementById('startDateDisplay');
+    const currentValueSymbolEl = document.getElementById('currentValueSymbol');
+    const totalProfitSymbolEl = document.getElementById('totalProfitSymbol');
+
+
+    /**
+     * Utility function to format currency (INR only).
+     * Uses 0 decimals (whole numbers).
+     */
+    const formatCurrency = (amount) => {
+        const absoluteAmount = Math.abs(amount);
+        // The numbers here need to be rounded up for a consistent display
+        return Math.round(absoluteAmount).toLocaleString('en-IN', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    };
+    
+    /**
+     * Utility function to format currency for the real-time ticker (INR).
+     * This is not used now but kept for consistency if ticker decimals return.
+     */
+    const formatTickerCurrency = (amount) => {
+        const absoluteAmount = Math.abs(amount);
+        return absoluteAmount.toLocaleString('en-IN', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    };
+
+
+    const calculatePreciseGrowth = (ms) => {
+        if (ms < 0) return INITIAL_PRINCIPAL_INR;
+        return INITIAL_PRINCIPAL_INR + (PROFIT_PER_MS * ms);
+    };
+
+    const calculateDailyGrowth = (days) => {
+        if (days < 0) return INITIAL_PRINCIPAL_INR;
+        return INITIAL_PRINCIPAL_INR + (DAILY_PROFIT * days);
+    };
+
+    // --- Account Modal Toggle Function ---
+    window.toggleModal = () => {
+        const modal = document.getElementById('accountModal');
+        modal.classList.toggle('hidden');
+    };
+
+    // --- Chart Logic ---
+
+    /**
+     * Generates data points for the projection chart.
+     */
+    const generateChartData = (daysElapsed) => {
+        const labels = [];
+        const data = [];
+        const months = 12; // Project 1 year (12 months) forward
+
+        // Current value (Day 0 of projection)
+        const startValue = calculateDailyGrowth(daysElapsed);
+        labels.push("0"); // Current month label
+        data.push(Math.round(startValue)); // Rounded for clean chart display
+        
+        // Future monthly points
+        for (let i = 1; i <= months; i++) {
+            const days = daysElapsed + (i * DAYS_IN_MONTH); // Use explicit 30 days per month
+            const value = calculateDailyGrowth(days);
+            labels.push(`${i}`); // Simple number label
+            data.push(Math.round(value)); // Rounded for clean chart display
+        }
+
+        return { labels, data };
+    };
+
+    /**
+     * Initializes or updates the Chart.js instance.
+     */
+    const renderChart = (chartData) => {
+        const ctx = document.getElementById('projectionChart').getContext('2d');
+        const symbol = CURRENCY_SYMBOL;
+        const primaryColor = '#ffffff'; // White text for axis/labels
+        const neonGreen = '#00ff00';
+
+        // Create the gradient for the fill area (for aesthetic polish)
+        const gradient = ctx.createLinearGradient(0, 0, 0, 350);
+        gradient.addColorStop(0, 'rgba(0, 255, 0, 0.4)'); // Neon Green top
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.1)'); // Transparent/Black bottom
+        
+        const formatValue = (value) => {
+            // Use rounded format for chart tooltips
+            return `${symbol}${Math.round(value).toLocaleString('en-IN')}`;
+        };
+
+        const chartDatasets = [{
+            label: `Projected Value (INR)`,
+            data: chartData.data,
+            borderColor: neonGreen,
+            backgroundColor: gradient, 
+            borderWidth: 2,
+            pointBackgroundColor: neonGreen,
+            tension: 0.4, 
+            fill: true,
+        }];
+
+        const config = {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: chartDatasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                color: primaryColor,
+                animation: {
+                    duration: projectionChartInstance ? 0 : 1500, // Only animate on initial load
+                    easing: 'easeOutQuart',
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: primaryColor,
+                            font: { size: 14 }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => {
+                                return `Value: ${formatValue(context.parsed.y)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false 
+                        },
+                        ticks: {
+                            color: primaryColor
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time (Monthly Intervals)',
+                            color: primaryColor
+                        }
+                    },
+                    y: {
+                        grid: {
+                            display: false 
+                        },
+                        ticks: {
+                            color: primaryColor,
+                            callback: (value) => formatValue(value)
+                        },
+                        title: {
+                            display: true,
+                            text: `Value in INR`,
+                            color: primaryColor
+                        }
+                    }
+                }
+            }
+        };
+
+        if (projectionChartInstance) {
+            projectionChartInstance.data.labels = config.data.labels;
+            projectionChartInstance.data.datasets = config.data.datasets; 
+            projectionChartInstance.options.scales.y.title.text = config.options.scales.y.title.text;
+            projectionChartInstance.options.plugins.legend.labels.color = config.options.plugins.legend.labels.color;
+            projectionChartInstance.options.animation.duration = 0; 
+
+            projectionChartInstance.update();
+        } else {
+            projectionChartInstance = new Chart(ctx, config);
+        }
+    };
+
+    // --- Main Update Function ---
+    window.updateSimulation = () => {
+        const today = new Date();
+        const totalMillisecondsElapsed = today.getTime() - FIXED_START_DATE_OBJ.getTime();
+        const daysDifference = totalMillisecondsElapsed / MS_PER_DAY; 
+        const daysElapsed = Math.max(0, Math.floor(daysDifference)); 
+
+        daysElapsedEl.textContent = daysElapsed;
+
+        const currentValue = calculatePreciseGrowth(totalMillisecondsElapsed);
+        const profit = currentValue - INITIAL_PRINCIPAL_INR;
+
+        // Display current value and profit rounded (no decimals)
+        currentValueEl.textContent = formatCurrency(currentValue);
+        totalProfitEl.textContent = formatCurrency(profit);
+
+        // Display percentage calculated using full precision
+        const profitPercent = (profit / INITIAL_PRINCIPAL_INR) * 100;
+        const profitTextClass = profit >= 0 ? 'profit-gain' : 'profit-loss';
+        const profitWord = profit >= 0 ? 'Gain' : 'Loss';
+        
+        totalProfitEl.classList.remove('profit-gain', 'profit-loss');
+        totalProfitEl.classList.add(profitTextClass);
+
+        profitPercentEl.innerHTML = `<span class="${profitTextClass}">${profitPercent.toFixed(2)}% ${profitWord}</span>`;
+
+        // Update the Chart
+        const chartData = generateChartData(daysElapsed);
+        renderChart(chartData);
+    };
+    
+    // --- Initialization ---
+    document.addEventListener('DOMContentLoaded', () => {
+        startDateDisplayEl.textContent = `Calculated since ${FIXED_START_DATE_STR}.`;
+        // Since there is no currency switch, we run updateSimulation directly
+        updateSimulation(); 
+        setInterval(updateSimulation, 1000); 
+    });
+
+    try {
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-sim';
+        let firebaseConfig = {};
+        if (typeof __firebase_config === 'string' && __firebase_config.length > 0) {
+             firebaseConfig = JSON.parse(__firebase_config);
+        }
+        if (Object.keys(firebaseConfig).length > 0) {
+            // Firebase integration placeholder
+        }
+    } catch (e) {
+        console.error("Firebase environment variable parsing failed:", e);
+    }
+</script>
+</body>
+</html>
