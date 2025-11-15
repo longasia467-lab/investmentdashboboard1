@@ -15,6 +15,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // This makes the Firebase and Auth instances globally accessible within the module scope
+        window.firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, getDoc, setDoc, setLogLevel };
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -161,8 +171,8 @@
         </button>
         <div class="space-y-3 text-sm">
             <p><span class="font-semibold longasia-text-accent">Holder Name:</span> <span class="longasia-text-primary">Hiraman Paunikar</span></p>
-            <p><span class="font-semibold longasia-text-accent">Account Number:</span> <span class="longasia-text-primary">36166754</span></p>
-            <p><span class="font-semibold longasia-text-accent">National ID:</span> <span class="longasia-text-primary">**** **** ****</span></p>
+            <p><span class="font-semibold longasia-text-accent">Account Number:</span> <span class="longasia-text-primary">36152457</span></p>
+            <p><span class="font-semibold longasia-text-accent">National ID:</span> <span class="longasia-text-primary">***** 02385</span></p>
             <p class="pt-2"><span class="font-semibold longasia-text-accent">Status:</span> <span class="profit-gain font-bold">Verified</span></p>
         </div>
     </div>
@@ -265,48 +275,50 @@
             var __firebase_config = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
             var __initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
         </script>
-    </div><!-- End of main glass-card container --></div><!-- End of main-content-wrapper --><script type="module">
+    </div><!-- End of main glass-card container --></div><!-- End of main-content-wrapper -->
+
+<script type="module">
+    // Using window.firebase from the import block above
+    const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, getDoc, setDoc, setLogLevel } = window.firebase;
+
+    // --- Investment Constants (Defaults, will be overwritten by Firestore) ---
+    const DEFAULT_INITIAL_PRINCIPAL_INR = 30000; // UPDATED TO 30,000
+    const MONTHLY_RATE = 0.05; // 5% per month
+    const DAYS_IN_MONTH = 30; // Set to 30 days exactly
+    const CURRENCY_SYMBOL = '₹';
+    
+    // Calculated constants
+    const DAILY_PROFIT_RATE = MONTHLY_RATE / DAYS_IN_MONTH; // Daily rate on principal
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    
+    // Global storage for dynamic values
+    let FIREBASE_APP = null;
+    let AUTH = null;
+    let DB = null;
+    let USER_ID = null;
+    let START_DATE_MS = null; // Stored as milliseconds since epoch
+    let CURRENT_PRINCIPAL = DEFAULT_INITIAL_PRINCIPAL_INR; // Variable to hold the persistent principal
+
     // --- Chart Instance Variable ---
     let projectionChartInstance = null; 
 
-    // --- Investment Constants (INR Base) ---
-    const INITIAL_PRINCIPAL_INR = 30000; // Reset to 30,000
-    const MONTHLY_RATE = 0.05; // Reset to 5%
-    const DAYS_IN_MONTH = 30; // Set to 30 days exactly
-    
-    // Calculate required daily profit amount
-    const DAILY_PROFIT = (INITIAL_PRINCIPAL_INR * MONTHLY_RATE) / DAYS_IN_MONTH; // (30000 * 0.05) / 30 = 50 INR/day
-    
-    // Calculate new FIXED_START_DATE_OBJ to be TODAY
-    const today = new Date();
-    const FIXED_START_DATE_OBJ = today; 
-    
-    const FIXED_START_DATE_STR = FIXED_START_DATE_OBJ.toLocaleDateString('en-US');
-    const MS_PER_DAY = 1000 * 60 * 60 * 24;
-    
-    // PROFIT_PER_MS is calculated as: (DAILY_PROFIT / MS_PER_DAY)
-    const PROFIT_PER_MS = DAILY_PROFIT / MS_PER_DAY; 
-
-    const CURRENCY_SYMBOL = '₹';
-    
     // --- DOM Elements ---
     const daysElapsedEl = document.getElementById('daysElapsed');
     const currentValueEl = document.getElementById('currentValue');
     const totalProfitEl = document.getElementById('totalProfit');
     const profitPercentEl = document.getElementById('profitPercent');
     const startDateDisplayEl = document.getElementById('startDateDisplay');
-    const currentValueSymbolEl = document.getElementById('currentValueSymbol');
-    const totalProfitSymbolEl = document.getElementById('totalProfitSymbol');
-
+    
+    // --- Utility Functions ---
 
     /**
      * Utility function to format currency for the main cards (Current Value, Total Profit).
-     * Uses 2 decimals for the visible ticker effect, as the update interval is now 1 minute.
+     * Uses 2 decimals for the visible ticker effect.
      */
     const formatTickerCurrency = (amount) => {
         const absoluteAmount = Math.abs(amount);
         return absoluteAmount.toLocaleString('en-IN', {
-            minimumFractionDigits: 2, // Reset to 2 decimal places
+            minimumFractionDigits: 2, 
             maximumFractionDigits: 2
         });
     };
@@ -323,15 +335,27 @@
         });
     };
 
-
-    const calculatePreciseGrowth = (ms) => {
-        if (ms < 0) return INITIAL_PRINCIPAL_INR;
-        return INITIAL_PRINCIPAL_INR + (PROFIT_PER_MS * ms);
+    /**
+     * Core calculation based on time elapsed in milliseconds.
+     */
+    const calculatePreciseGrowth = (totalMillisecondsElapsed, initialPrincipal) => {
+        if (totalMillisecondsElapsed < 0) return initialPrincipal;
+        
+        // DAILY_PROFIT is calculated based on the current principal and rate
+        const DAILY_PROFIT_AMOUNT = initialPrincipal * DAILY_PROFIT_RATE;
+        const PROFIT_PER_MS = DAILY_PROFIT_AMOUNT / MS_PER_DAY;
+        
+        // This is the core persistence: Initial Principal + Accumulated Profit over the total time elapsed
+        return initialPrincipal + (PROFIT_PER_MS * totalMillisecondsElapsed);
     };
 
-    const calculateDailyGrowth = (days) => {
-        if (days < 0) return INITIAL_PRINCIPAL_INR;
-        return INITIAL_PRINCIPAL_INR + (DAILY_PROFIT * days);
+    /**
+     * Core calculation based on full days elapsed (used for chart projection points).
+     */
+    const calculateDailyGrowth = (days, initialPrincipal) => {
+        if (days < 0) return initialPrincipal;
+        const DAILY_PROFIT_AMOUNT = initialPrincipal * DAILY_PROFIT_RATE;
+        return initialPrincipal + (DAILY_PROFIT_AMOUNT * days);
     };
 
     // --- Account Modal Toggle Function ---
@@ -342,47 +366,35 @@
 
     // --- Chart Logic ---
 
-    /**
-     * Generates data points for the projection chart.
-     */
-    const generateChartData = (daysElapsed) => {
+    const generateChartData = (daysElapsed, initialPrincipal) => {
         const labels = [];
         const data = [];
-        const months = 12; // Project 1 year (12 months) forward
+        const months = 12;
 
-        // Current value (Day 0 of projection)
-        const startValue = calculateDailyGrowth(daysElapsed);
-        labels.push("0"); // Current month label
-        data.push(Math.round(startValue)); // Rounded for clean chart display
+        const startValue = calculateDailyGrowth(daysElapsed, initialPrincipal);
+        labels.push("0"); 
+        data.push(Math.round(startValue));
         
-        // Future monthly points
         for (let i = 1; i <= months; i++) {
-            const days = daysElapsed + (i * DAYS_IN_MONTH); // Use explicit 30 days per month
-            const value = calculateDailyGrowth(days);
-            labels.push(`${i}`); // Simple number label
-            data.push(Math.round(value)); // Rounded for clean chart display
+            const days = daysElapsed + (i * DAYS_IN_MONTH); 
+            const value = calculateDailyGrowth(days, initialPrincipal);
+            labels.push(`${i}`);
+            data.push(Math.round(value));
         }
-
         return { labels, data };
     };
 
-    /**
-     * Initializes or updates the Chart.js instance.
-     */
     const renderChart = (chartData) => {
         const ctx = document.getElementById('projectionChart').getContext('2d');
-        const symbol = CURRENCY_SYMBOL;
-        const primaryColor = '#ffffff'; // White text for axis/labels
+        const primaryColor = '#ffffff'; 
         const neonGreen = '#00ff00';
 
-        // Create the gradient for the fill area (for aesthetic polish)
         const gradient = ctx.createLinearGradient(0, 0, 0, 350);
-        gradient.addColorStop(0, 'rgba(0, 255, 0, 0.4)'); // Neon Green top
-        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.1)'); // Transparent/Black bottom
+        gradient.addColorStop(0, 'rgba(0, 255, 0, 0.4)'); 
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
         
         const formatValue = (value) => {
-            // Use rounded format for chart tooltips
-            return `${symbol}${Math.round(value).toLocaleString('en-IN')}`;
+            return `${CURRENCY_SYMBOL}${Math.round(value).toLocaleString('en-IN')}`;
         };
 
         const chartDatasets = [{
@@ -407,7 +419,7 @@
                 maintainAspectRatio: false,
                 color: primaryColor,
                 animation: {
-                    duration: projectionChartInstance ? 0 : 1500, // Only animate on initial load
+                    duration: projectionChartInstance ? 0 : 1500,
                     easing: 'easeOutQuart',
                 },
                 plugins: {
@@ -427,31 +439,17 @@
                 },
                 scales: {
                     x: {
-                        grid: {
-                            display: false 
-                        },
-                        ticks: {
-                            color: primaryColor
-                        },
-                        title: {
-                            display: true,
-                            text: 'Time (Monthly Intervals)',
-                            color: primaryColor
-                        }
+                        grid: { display: false },
+                        ticks: { color: primaryColor },
+                        title: { display: true, text: 'Time (Monthly Intervals)', color: primaryColor }
                     },
                     y: {
-                        grid: {
-                            display: false 
-                        },
+                        grid: { display: false },
                         ticks: {
                             color: primaryColor,
                             callback: (value) => formatValue(value)
                         },
-                        title: {
-                            display: true,
-                            text: `Value in INR`,
-                            color: primaryColor
-                        }
+                        title: { display: true, text: `Value in INR`, color: primaryColor }
                     }
                 }
             }
@@ -460,10 +458,7 @@
         if (projectionChartInstance) {
             projectionChartInstance.data.labels = config.data.labels;
             projectionChartInstance.data.datasets = config.data.datasets; 
-            projectionChartInstance.options.scales.y.title.text = config.options.scales.y.title.text;
-            projectionChartInstance.options.plugins.legend.labels.color = config.options.plugins.legend.labels.color;
             projectionChartInstance.options.animation.duration = 0; 
-
             projectionChartInstance.update();
         } else {
             projectionChartInstance = new Chart(ctx, config);
@@ -472,22 +467,25 @@
 
     // --- Main Update Function ---
     window.updateSimulation = () => {
+        // Use the globally stored CURRENT_PRINCIPAL
+        const initialPrincipal = CURRENT_PRINCIPAL; 
+        
+        if (!START_DATE_MS) return;
+
         const today = new Date();
-        const totalMillisecondsElapsed = today.getTime() - FIXED_START_DATE_OBJ.getTime();
+        const totalMillisecondsElapsed = today.getTime() - START_DATE_MS;
         const daysDifference = totalMillisecondsElapsed / MS_PER_DAY; 
         const daysElapsed = Math.max(0, Math.floor(daysDifference)); 
 
         daysElapsedEl.textContent = daysElapsed;
 
-        const currentValue = calculatePreciseGrowth(totalMillisecondsElapsed);
-        const profit = currentValue - INITIAL_PRINCIPAL_INR;
+        const currentValue = calculatePreciseGrowth(totalMillisecondsElapsed, initialPrincipal);
+        const profit = currentValue - initialPrincipal;
 
-        // Display current value and profit using high precision for visible ticker
         currentValueEl.textContent = formatTickerCurrency(currentValue);
         totalProfitEl.textContent = formatTickerCurrency(profit);
 
-        // Display percentage calculated using full precision
-        const profitPercent = (profit / INITIAL_PRINCIPAL_INR) * 100;
+        const profitPercent = (profit / initialPrincipal) * 100;
         const profitTextClass = profit >= 0 ? 'profit-gain' : 'profit-loss';
         const profitWord = profit >= 0 ? 'Gain' : 'Loss';
         
@@ -496,33 +494,121 @@
 
         profitPercentEl.innerHTML = `<span class="${profitTextClass}">${profitPercent.toFixed(2)}% ${profitWord}</span>`;
 
-        // Update the Chart
-        const chartData = generateChartData(daysElapsed);
+        const chartData = generateChartData(daysElapsed, initialPrincipal);
         renderChart(chartData);
     };
     
+    // --- Firebase Initialization and Data Loading ---
+    const initializeFirebaseAndLoadData = async () => {
+        try {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-sim';
+            let firebaseConfig = {};
+
+            if (typeof __firebase_config === 'string' && __firebase_config.length > 0) {
+                 firebaseConfig = JSON.parse(__firebase_config);
+            }
+
+            if (Object.keys(firebaseConfig).length === 0) {
+                throw new Error("Firebase configuration is missing or invalid.");
+            }
+            
+            // setLogLevel('debug');
+            FIREBASE_APP = initializeApp(firebaseConfig);
+            AUTH = getAuth(FIREBASE_APP);
+            DB = getFirestore(FIREBASE_APP);
+            
+            
+            // 1. Authenticate (using anonymous sign-in if no token is provided)
+            await new Promise(resolve => {
+                onAuthStateChanged(AUTH, (user) => { 
+                    if (user) {
+                        USER_ID = user.uid;
+                        resolve();
+                    } else if (typeof __initial_auth_token !== 'undefined') {
+                        signInWithCustomToken(AUTH, __initial_auth_token).then(() => resolve()).catch(() => signInAnonymously(AUTH).then(() => resolve()));
+                    } else {
+                        signInAnonymously(AUTH).then(() => resolve()).catch(err => {
+                            console.error("Anonymous sign-in failed:", err);
+                            resolve(); // Resolve anyway to proceed with default state
+                        });
+                    }
+                });
+            });
+
+            // Re-get User ID after successful sign-in
+            USER_ID = AUTH.currentUser?.uid || 'anonymous';
+            
+            // Use the dynamically obtained USER_ID in the document path
+            const configDocRef = doc(DB, "artifacts", appId, "users", USER_ID, "config", "investment");
+            
+            // 2. Load or Initialize Data
+            const docSnapshot = await getDoc(configDocRef);
+            let initialPrincipal = DEFAULT_INITIAL_PRINCIPAL_INR; // Target principal from code
+
+            if (docSnapshot.exists()) {
+                const data = docSnapshot.data();
+                
+                // CHECK: If the loaded principal doesn't match the hardcoded default, force a reset (new investment)
+                if (data.initialPrincipal !== initialPrincipal) {
+                    console.log(`Principal mismatch detected. Resetting start date to today and updating principal to ${initialPrincipal}.`);
+                    
+                    const todayMs = new Date().getTime();
+                    const initialData = {
+                        startDateMs: todayMs,
+                        initialPrincipal: initialPrincipal,
+                    };
+                    
+                    await setDoc(configDocRef, initialData);
+                    START_DATE_MS = todayMs;
+                    
+                } else {
+                    // Match found: Use saved date and principal
+                    START_DATE_MS = data.startDateMs;
+                }
+            } else {
+                // If no persistent data exists, set today as the starting date and save the principal
+                const todayMs = new Date().getTime();
+                const initialData = {
+                    startDateMs: todayMs,
+                    initialPrincipal: initialPrincipal,
+                };
+                
+                await setDoc(configDocRef, initialData);
+                START_DATE_MS = todayMs;
+                console.log("Initialized new persistent start date and principal.");
+            }
+            
+            // Store the final, confirmed principal globally
+            CURRENT_PRINCIPAL = initialPrincipal; 
+
+            // 3. Start Simulation
+            const fixedStartDate = new Date(START_DATE_MS);
+            startDateDisplayEl.textContent = `Calculated since ${fixedStartDate.toLocaleDateString('en-US')}.`;
+
+            // updateSimulation reads CURRENT_PRINCIPAL globally
+            window.updateSimulation(); 
+            setInterval(window.updateSimulation, 1000); 
+
+        } catch (e) {
+            console.error("Fatal initialization error. Using default ephemeral start date.", e);
+            
+            // Fallback: Use ephemeral (non-persistent) data if Firebase fails
+            const today = new Date();
+            START_DATE_MS = today.getTime();
+            const initialPrincipal = DEFAULT_INITIAL_PRINCIPAL_INR;
+            CURRENT_PRINCIPAL = initialPrincipal; // Set fallback principal
+            
+            startDateDisplayEl.textContent = `Calculated since ${today.toLocaleDateString('en-US')}. (Ephemeral)`;
+            window.updateSimulation(); 
+            setInterval(window.updateSimulation, 1000); 
+        }
+    };
+
     // --- Initialization ---
     document.addEventListener('DOMContentLoaded', () => {
-        startDateDisplayEl.textContent = `Calculated since ${FIXED_START_DATE_STR}.`;
-        // Since there is no currency switch, we run updateSimulation directly
-        updateSimulation(); 
-        
-        // --- UPDATED: Ticker runs every 60 seconds (1 minute) ---
-        setInterval(updateSimulation, 60000); 
+        // We defer starting the simulation until after Firebase load/auth
+        initializeFirebaseAndLoadData();
     });
-
-    try {
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-sim';
-        let firebaseConfig = {};
-        if (typeof __firebase_config === 'string' && __firebase_config.length > 0) {
-             firebaseConfig = JSON.parse(__firebase_config);
-        }
-        if (Object.keys(firebaseConfig).length > 0) {
-            // Firebase integration placeholder
-        }
-    } catch (e) {
-        console.error("Firebase environment variable parsing failed:", e);
-    }
 </script>
 </body>
 </html>
