@@ -66,12 +66,13 @@
             backdrop-filter: blur(10px); 
             --webkit-backdrop-filter: blur(10px); 
         }
-        .main-glass-card {
-            /* Main card with a subtle white/light gray gradient for emphasis */
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+        /* Special style for the main combined metric bar */
+        .metric-bar-glass {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
             border: 1px solid rgba(255, 255, 255, 0.2);
             backdrop-filter: blur(15px);
             --webkit-backdrop-filter: blur(15px);
+            padding: 1.5rem 2rem;
         }
         /* --- END GLASSCARD STYLES --- */
 
@@ -79,10 +80,10 @@
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
         }
-        /* Custom Keyframe for subtle pulse on the main card */
+        /* Custom Keyframe for subtle pulse on the main metric */
         @keyframes subtle-pulse {
-            0%, 100% { box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2); }
-            50% { box-shadow: 0 5px 15px rgba(255, 255, 255, 0.2); /* White glow */ }
+            0%, 100% { box-shadow: 0 0 5px rgba(0, 0, 0, 0.2); }
+            50% { box-shadow: 0 0 10px rgba(255, 255, 255, 0.2); /* White glow */ }
         }
         .animate-subtle-pulse {
             animation: subtle-pulse 5s infinite ease-in-out;
@@ -133,15 +134,20 @@
             max-width: 400px;
             position: relative;
         }
-        /* Currency button styles (Removed the active/hover styles since the switcher is gone) */
-        .currency-btn {
-            background-color: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 0.5rem 0.75rem;
-            font-weight: 600;
-            color: #ffffff;
-            transition: all 0.2s;
+        /* --- FIXED WIDTHS FOR METRIC BARS TO PREVENT SHIFTING --- */
+        .metric-col-1, .metric-col-3 {
+            width: 30%; /* Set explicit width for side columns */
         }
+        .metric-col-2 {
+            width: 40%; /* Set explicit width for center column */
+        }
+        @media (max-width: 767px) {
+            /* On mobile, revert to full width */
+            .metric-col-1, .metric-col-2, .metric-col-3 {
+                width: 100%;
+            }
+        }
+        /* --- END FIXED WIDTHS --- */
     </style>
 </head>
 <body>
@@ -195,46 +201,48 @@
 
         </header>
 
-        <!-- Current Status Section --><div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+        <!-- Current Status Section (COMBINED INTO ONE BAR) -->
+        <div class="metric-bar-glass rounded-xl shadow-2xl mb-12 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0 md:space-x-6 animate-subtle-pulse">
             
-            <!-- Card 1: Time Elapsed (Glass Effect) --><div class="glass-card longasia-text-secondary p-5 rounded-xl shadow-xl 
-                        transform hover:scale-[1.05] hover:shadow-white/10 transition duration-500 ease-in-out">
-                <p class="text-sm font-medium flex items-center">
+            <!-- Metric 1: Time Elapsed -->
+            <div class="metric-col-1 text-center md:text-left border-b md:border-b-0 md:border-r border-white/10 w-full md:w-auto pb-4 md:pb-0 md:pr-6">
+                <p class="text-sm font-medium flex items-center justify-center md:justify-start longasia-text-secondary mb-1">
                     <svg class="icon longasia-text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     Time Elapsed
                 </p>
-                <p id="daysElapsed" class="text-4xl font-black mt-1 longasia-text-primary">0</p>
-                <p id="startDateDisplay" class="text-xs mt-2 longasia-text-secondary">Calculated since Loading...</p>
+                <p id="daysElapsed" class="text-3xl font-black longasia-text-primary">0</p>
+                <p id="startDateDisplay" class="text-xs mt-1 longasia-text-secondary">Calculated since Loading...</p>
             </div>
 
-            <!-- Card 2: Current Value (Main Glass Card - Animated) --><div class="main-glass-card longasia-text-primary p-5 rounded-xl shadow-2xl 
-                        animate-subtle-pulse transform hover:scale-[1.05] transition duration-500 ease-in-out">
-                <p class="text-sm font-medium opacity-90 flex items-center">
+            <!-- Metric 2: Current Value (Centerpiece) -->
+            <div class="metric-col-2 text-center border-b md:border-b-0 md:border-r border-white/10 w-full md:w-auto py-4 md:py-0 md:px-6">
+                <p class="text-sm font-medium opacity-90 flex items-center justify-center longasia-text-primary mb-1">
                     <svg class="icon longasia-text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 0h8m-8 0H4"></path><path d="M17 5H7M17 19H7"></path></svg>
                     Current Tracked Value
                 </p>
-                <div class="flex items-baseline mt-1">
-                    <span id="currentValueSymbol" class="text-4xl font-extrabold">₹</span>
-                    <span id="currentValue" class="text-4xl font-black">30,000</span>
+                <div class="flex items-baseline justify-center">
+                    <span id="currentValueSymbol" class="text-3xl font-extrabold">₹</span>
+                    <span id="currentValue" class="text-3xl font-black">30,000.00</span>
                 </div>
-                <!-- Removed currentDateDisplay element --><p class="text-xs mt-2 longasia-text-secondary opacity-80">Real-time performance</p>
+                <p class="text-xs mt-1 longasia-text-secondary opacity-80">Real-time performance</p>
             </div>
 
-            <!-- Card 3: Total Profit (Glass Effect) --><div class="glass-card longasia-text-secondary p-5 rounded-xl shadow-xl
-                        transform hover:scale-[1.05] hover:shadow-white/10 transition duration-500 ease-in-out">
-                <p class="text-sm font-medium flex items-center">
+            <!-- Metric 3: Total Profit -->
+            <div class="metric-col-3 text-center md:text-right w-full md:w-auto pt-4 md:pt-0 md:pl-6">
+                <p class="text-sm font-medium flex items-center justify-center md:justify-end longasia-text-secondary mb-1">
                      <svg class="icon profit-gain" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M18 6l-9 9-4-4"></path></svg>
                     Total Profit
                 </p>
-                <div class="flex items-baseline mt-1">
-                    <span id="totalProfitSymbol" class="text-4xl font-extrabold profit-gain">₹</span>
-                    <span id="totalProfit" class="text-4xl font-black profit-gain">0</span>
+                <div class="flex items-baseline justify-center md:justify-end">
+                    <span id="totalProfitSymbol" class="text-3xl font-extrabold profit-gain">₹</span>
+                    <span id="totalProfit" class="text-3xl font-black profit-gain">0.00</span>
                 </div>
-                <p id="profitPercent" class="text-xs mt-2 longasia-text-secondary">
+                <p id="profitPercent" class="text-xs mt-1 longasia-text-secondary">
                     <span class="profit-gain">0.00% Gain</span>
                 </p>
             </div>
         </div>
+        <!-- END COMBINED STATUS SECTION -->
 
         <!-- Projections Graph Section (UPDATED) --><h2 class="text-xl font-bold longasia-text-primary mb-4 border-b longasia-border pb-3 uppercase tracking-wide">
             1 Year Projected Value
@@ -275,6 +283,8 @@
     
     const FIXED_START_DATE_STR = FIXED_START_DATE_OBJ.toLocaleDateString('en-US');
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    
+    // PROFIT_PER_MS is calculated as: (DAILY_PROFIT / MS_PER_DAY)
     const PROFIT_PER_MS = DAILY_PROFIT / MS_PER_DAY; 
 
     const CURRENCY_SYMBOL = '₹';
@@ -290,27 +300,26 @@
 
 
     /**
-     * Utility function to format currency (INR only).
-     * Uses 0 decimals (whole numbers).
-     */
-    const formatCurrency = (amount) => {
-        const absoluteAmount = Math.abs(amount);
-        // The numbers here need to be rounded up for a consistent display
-        return Math.round(absoluteAmount).toLocaleString('en-IN', {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 0
-        });
-    };
-    
-    /**
-     * Utility function to format currency for the real-time ticker (INR).
-     * This is not used now but kept for consistency if ticker decimals return.
+     * Utility function to format currency for the main cards (Current Value, Total Profit).
+     * Uses 2 decimals for the visible ticker effect, as the update interval is now 1 minute.
      */
     const formatTickerCurrency = (amount) => {
         const absoluteAmount = Math.abs(amount);
         return absoluteAmount.toLocaleString('en-IN', {
-            minimumFractionDigits: 2,
+            minimumFractionDigits: 2, // Reset to 2 decimal places
             maximumFractionDigits: 2
+        });
+    };
+    
+    /**
+     * Utility function to format currency for all other areas (Chart, Days Elapsed).
+     * Uses 0 decimals (whole numbers).
+     */
+    const formatCurrency = (amount) => {
+        const absoluteAmount = Math.abs(amount);
+        return Math.round(absoluteAmount).toLocaleString('en-IN', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
         });
     };
 
@@ -473,9 +482,9 @@
         const currentValue = calculatePreciseGrowth(totalMillisecondsElapsed);
         const profit = currentValue - INITIAL_PRINCIPAL_INR;
 
-        // Display current value and profit rounded (no decimals)
-        currentValueEl.textContent = formatCurrency(currentValue);
-        totalProfitEl.textContent = formatCurrency(profit);
+        // Display current value and profit using high precision for visible ticker
+        currentValueEl.textContent = formatTickerCurrency(currentValue);
+        totalProfitEl.textContent = formatTickerCurrency(profit);
 
         // Display percentage calculated using full precision
         const profitPercent = (profit / INITIAL_PRINCIPAL_INR) * 100;
@@ -497,7 +506,9 @@
         startDateDisplayEl.textContent = `Calculated since ${FIXED_START_DATE_STR}.`;
         // Since there is no currency switch, we run updateSimulation directly
         updateSimulation(); 
-        setInterval(updateSimulation, 1000); 
+        
+        // --- UPDATED: Ticker runs every 60 seconds (1 minute) ---
+        setInterval(updateSimulation, 60000); 
     });
 
     try {
