@@ -15,16 +15,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
     <!-- Chart.js Library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <!-- Firebase Imports -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        
-        // This makes the Firebase and Auth instances globally accessible within the module scope
-        window.firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, getDoc, setDoc, setLogLevel };
-    </script>
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -162,7 +153,7 @@
 </head>
 <body>
 
-<!-- Account Details Modal Structure (UPDATED) -->
+<!-- Account Details Modal Structure -->
 <div id="accountModal" class="modal-overlay hidden">
     <div class="modal-glass">
         <h3 class="text-2xl font-bold longasia-text-primary mb-4 border-b longasia-border pb-2">Account Details</h3>
@@ -182,8 +173,6 @@
 
     <div class="glass-card rounded-2xl p-8 md:p-10 
                 shadow-2xl transition duration-500 ease-in-out relative">
-        
-        <!-- Currency Switcher REMOVED -->
         
         <!-- Account Circle Button -->
         <button onclick="window.toggleModal()" class="absolute top-4 right-4 md:top-6 md:right-6 
@@ -271,6 +260,7 @@
         </footer>
 
         <!-- Hidden Firebase Globals (Required for Canvas Environment) --><script>
+            // These variables are no longer used for persistence but are kept for safe Canvas execution
             var __app_id = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-sim';
             var __firebase_config = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
             var __initial_auth_token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
@@ -278,26 +268,23 @@
     </div><!-- End of main glass-card container --></div><!-- End of main-content-wrapper -->
 
 <script type="module">
-    // Using window.firebase from the import block above
-    const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, getFirestore, doc, getDoc, setDoc, setLogLevel } = window.firebase;
-
-    // --- Investment Constants (Defaults, will be overwritten by Firestore) ---
-    const DEFAULT_INITIAL_PRINCIPAL_INR = 30000; // UPDATED TO 30,000
-    const MONTHLY_RATE = 0.05; // 5% per month
-    const DAYS_IN_MONTH = 30; // Set to 30 days exactly
+    // --- Investment Constants ---
+    const INITIAL_PRINCIPAL_INR = 30000; // Fixed starting principal
     const CURRENCY_SYMBOL = '₹';
     
-    // Calculated constants
-    const DAILY_PROFIT_RATE = MONTHLY_RATE / DAYS_IN_MONTH; // Daily rate on principal
+    // --- Persistence Keys ---
+    const START_DATE_KEY = 'longasia_start_date_ms';
+    const PRINCIPAL_KEY = 'longasia_initial_principal';
+
+    // --- Continuous Growth Rate (Reverted to simple interest) ---
+    // Total Daily Profit: 50 INR (30000 * 5% / 30 days = 50)
+    const DAILY_PROFIT = 50; 
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const PROFIT_PER_MS = DAILY_PROFIT / MS_PER_DAY; // Profit earned every millisecond
+    const DAYS_IN_MONTH = 30; // Used for projections
     
     // Global storage for dynamic values
-    let FIREBASE_APP = null;
-    let AUTH = null;
-    let DB = null;
-    let USER_ID = null;
-    let START_DATE_MS = null; // Stored as milliseconds since epoch
-    let CURRENT_PRINCIPAL = DEFAULT_INITIAL_PRINCIPAL_INR; // Variable to hold the persistent principal
+    let START_DATE_MS = null;
 
     // --- Chart Instance Variable ---
     let projectionChartInstance = null; 
@@ -336,48 +323,39 @@
     };
 
     /**
-     * Core calculation based on time elapsed in milliseconds.
+     * Core calculation based on time elapsed in milliseconds (Continuous Growth).
      */
     const calculatePreciseGrowth = (totalMillisecondsElapsed, initialPrincipal) => {
         if (totalMillisecondsElapsed < 0) return initialPrincipal;
         
-        // DAILY_PROFIT is calculated based on the current principal and rate
-        const DAILY_PROFIT_AMOUNT = initialPrincipal * DAILY_PROFIT_RATE;
-        const PROFIT_PER_MS = DAILY_PROFIT_AMOUNT / MS_PER_DAY;
-        
-        // This is the core persistence: Initial Principal + Accumulated Profit over the total time elapsed
+        // Initial Principal + Accumulated Profit over the total time elapsed
         return initialPrincipal + (PROFIT_PER_MS * totalMillisecondsElapsed);
     };
 
     /**
-     * Core calculation based on full days elapsed (used for chart projection points).
+     * Calculates the projected value based on full days elapsed. Used for chart.
      */
-    const calculateDailyGrowth = (days, initialPrincipal) => {
-        if (days < 0) return initialPrincipal;
-        const DAILY_PROFIT_AMOUNT = initialPrincipal * DAILY_PROFIT_RATE;
-        return initialPrincipal + (DAILY_PROFIT_AMOUNT * days);
+    const calculateProjectedGrowth = (days) => {
+        if (days < 0) return INITIAL_PRINCIPAL_INR;
+        // Simple Growth: Initial Principal + (Daily Growth * Days)
+        return INITIAL_PRINCIPAL_INR + (DAILY_PROFIT * days);
     };
 
-    // --- Account Modal Toggle Function ---
-    window.toggleModal = () => {
-        const modal = document.getElementById('accountModal');
-        modal.classList.toggle('hidden');
-    };
 
-    // --- Chart Logic ---
+    // --- Chart Logic (Remains unchanged) ---
 
-    const generateChartData = (daysElapsed, initialPrincipal) => {
+    const generateChartData = (daysElapsed) => {
         const labels = [];
         const data = [];
         const months = 12;
 
-        const startValue = calculateDailyGrowth(daysElapsed, initialPrincipal);
+        const startValue = calculateProjectedGrowth(daysElapsed);
         labels.push("0"); 
         data.push(Math.round(startValue));
         
         for (let i = 1; i <= months; i++) {
             const days = daysElapsed + (i * DAYS_IN_MONTH); 
-            const value = calculateDailyGrowth(days, initialPrincipal);
+            const value = calculateProjectedGrowth(days);
             labels.push(`${i}`);
             data.push(Math.round(value));
         }
@@ -467,8 +445,7 @@
 
     // --- Main Update Function ---
     window.updateSimulation = () => {
-        // Use the globally stored CURRENT_PRINCIPAL
-        const initialPrincipal = CURRENT_PRINCIPAL; 
+        const initialPrincipal = INITIAL_PRINCIPAL_INR; 
         
         if (!START_DATE_MS) return;
 
@@ -494,120 +471,45 @@
 
         profitPercentEl.innerHTML = `<span class="${profitTextClass}">${profitPercent.toFixed(2)}% ${profitWord}</span>`;
 
-        const chartData = generateChartData(daysElapsed, initialPrincipal);
+        const chartData = generateChartData(daysElapsed);
         renderChart(chartData);
     };
     
-    // --- Firebase Initialization and Data Loading ---
-    const initializeFirebaseAndLoadData = async () => {
-        try {
-            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-trading-sim';
-            let firebaseConfig = {};
+    // --- Persistence Loading ---
+    const loadPersistence = () => {
+        const savedStartMs = localStorage.getItem(START_DATE_KEY);
+        const savedPrincipal = localStorage.getItem(PRINCIPAL_KEY);
 
-            if (typeof __firebase_config === 'string' && __firebase_config.length > 0) {
-                 firebaseConfig = JSON.parse(__firebase_config);
-            }
+        const currentPrincipalCheck = savedPrincipal ? parseFloat(savedPrincipal) : 0;
 
-            if (Object.keys(firebaseConfig).length === 0) {
-                throw new Error("Firebase configuration is missing or invalid.");
-            }
+        if (savedStartMs && currentPrincipalCheck === INITIAL_PRINCIPAL_INR) {
+            // Case 1: Persistent data exists and matches the current investment principal
+            START_DATE_MS = parseInt(savedStartMs, 10);
+            console.log("Loaded persistent start date from localStorage.");
+        } else {
+            // Case 2: No data, or Principal was changed -> RESET START DATE
+            const todayMs = new Date().getTime();
+            START_DATE_MS = todayMs;
             
-            // setLogLevel('debug');
-            FIREBASE_APP = initializeApp(firebaseConfig);
-            AUTH = getAuth(FIREBASE_APP);
-            DB = getFirestore(FIREBASE_APP);
-            
-            
-            // 1. Authenticate (using anonymous sign-in if no token is provided)
-            await new Promise(resolve => {
-                onAuthStateChanged(AUTH, (user) => { 
-                    if (user) {
-                        USER_ID = user.uid;
-                        resolve();
-                    } else if (typeof __initial_auth_token !== 'undefined') {
-                        signInWithCustomToken(AUTH, __initial_auth_token).then(() => resolve()).catch(() => signInAnonymously(AUTH).then(() => resolve()));
-                    } else {
-                        signInAnonymously(AUTH).then(() => resolve()).catch(err => {
-                            console.error("Anonymous sign-in failed:", err);
-                            resolve(); // Resolve anyway to proceed with default state
-                        });
-                    }
-                });
-            });
-
-            // Re-get User ID after successful sign-in
-            USER_ID = AUTH.currentUser?.uid || 'anonymous';
-            
-            // Use the dynamically obtained USER_ID in the document path
-            const configDocRef = doc(DB, "artifacts", appId, "users", USER_ID, "config", "investment");
-            
-            // 2. Load or Initialize Data
-            const docSnapshot = await getDoc(configDocRef);
-            let initialPrincipal = DEFAULT_INITIAL_PRINCIPAL_INR; // Target principal from code
-
-            if (docSnapshot.exists()) {
-                const data = docSnapshot.data();
-                
-                // CHECK: If the loaded principal doesn't match the hardcoded default, force a reset (new investment)
-                if (data.initialPrincipal !== initialPrincipal) {
-                    console.log(`Principal mismatch detected. Resetting start date to today and updating principal to ${initialPrincipal}.`);
-                    
-                    const todayMs = new Date().getTime();
-                    const initialData = {
-                        startDateMs: todayMs,
-                        initialPrincipal: initialPrincipal,
-                    };
-                    
-                    await setDoc(configDocRef, initialData);
-                    START_DATE_MS = todayMs;
-                    
-                } else {
-                    // Match found: Use saved date and principal
-                    START_DATE_MS = data.startDateMs;
-                }
-            } else {
-                // If no persistent data exists, set today as the starting date and save the principal
-                const todayMs = new Date().getTime();
-                const initialData = {
-                    startDateMs: todayMs,
-                    initialPrincipal: initialPrincipal,
-                };
-                
-                await setDoc(configDocRef, initialData);
-                START_DATE_MS = todayMs;
-                console.log("Initialized new persistent start date and principal.");
-            }
-            
-            // Store the final, confirmed principal globally
-            CURRENT_PRINCIPAL = initialPrincipal; 
-
-            // 3. Start Simulation
-            const fixedStartDate = new Date(START_DATE_MS);
-            startDateDisplayEl.textContent = `Calculated since ${fixedStartDate.toLocaleDateString('en-US')}.`;
-
-            // updateSimulation reads CURRENT_PRINCIPAL globally
-            window.updateSimulation(); 
-            setInterval(window.updateSimulation, 1000); 
-
-        } catch (e) {
-            console.error("Fatal initialization error. Using default ephemeral start date.", e);
-            
-            // Fallback: Use ephemeral (non-persistent) data if Firebase fails
-            const today = new Date();
-            START_DATE_MS = today.getTime();
-            const initialPrincipal = DEFAULT_INITIAL_PRINCIPAL_INR;
-            CURRENT_PRINCIPAL = initialPrincipal; // Set fallback principal
-            
-            startDateDisplayEl.textContent = `Calculated since ${today.toLocaleDateString('en-US')}. (Ephemeral)`;
-            window.updateSimulation(); 
-            setInterval(window.updateSimulation, 1000); 
+            // --- Ensure data is written immediately ---
+            localStorage.setItem(START_DATE_KEY, todayMs.toString());
+            localStorage.setItem(PRINCIPAL_KEY, INITIAL_PRINCIPAL_INR.toString());
+            console.log("Initialized new persistent start date.");
         }
+        
+        // Start Simulation
+        const fixedStartDate = new Date(START_DATE_MS);
+        startDateDisplayEl.textContent = `Calculated since ${fixedStartDate.toLocaleDateString('en-US')}.`;
+
+        window.updateSimulation(); 
+        
+        // --- FIX: Re-enable the 1-second continuous update for the ticker effect ---
+        setInterval(window.updateSimulation, 1000); 
     };
 
     // --- Initialization ---
     document.addEventListener('DOMContentLoaded', () => {
-        // We defer starting the simulation until after Firebase load/auth
-        initializeFirebaseAndLoadData();
+        loadPersistence();
     });
 </script>
 </body>
