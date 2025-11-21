@@ -55,7 +55,7 @@
            for max-width and centering, so the styles are simplified. */
         .main-content-wrapper {
             width: 100%;
-            max-width: 7xl; 
+            max-w-7xl; 
             position: relative; 
             z-index: 1; /* Ensure content is above the background layer */
         }
@@ -209,7 +209,7 @@
                     <svg class="icon longasia-text-accent" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                     Time Elapsed
                 </p>
-                <p id="daysElapsed" class="text-3xl font-black longasia-text-primary">0</p>
+                <p id="daysElapsed" class="text-3xl font-black longasia-text-primary">60</p>
                 <p id="startDateDisplay" class="text-xs mt-1 longasia-text-secondary">Calculated since Loading...</p>
             </div>
 
@@ -221,7 +221,7 @@
                 </p>
                 <div class="flex items-baseline justify-center">
                     <span id="currentValueSymbol" class="text-3xl font-extrabold">₹</span>
-                    <span id="currentValue" class="text-3xl font-black">30,000.00</span>
+                    <span id="currentValue" class="text-3xl font-black">55,000.00</span>
                 </div>
                 <p class="text-xs mt-1 longasia-text-secondary opacity-80">Real-time performance</p>
             </div>
@@ -234,10 +234,10 @@
                 </p>
                 <div class="flex items-baseline justify-center md:justify-end">
                     <span id="totalProfitSymbol" class="text-3xl font-extrabold profit-gain">₹</span>
-                    <span id="totalProfit" class="text-3xl font-black profit-gain">0.00</span>
+                    <span id="totalProfit" class="text-3xl font-black profit-gain">5,000.00</span>
                 </div>
                 <p id="profitPercent" class="text-xs mt-1 longasia-text-secondary">
-                    <span class="profit-gain">0.00% Gain</span>
+                    <span class="profit-gain">10.00% Gain</span>
                 </p>
             </div>
         </div>
@@ -269,19 +269,24 @@
 
 <script type="module">
     // --- Investment Constants ---
-    const INITIAL_PRINCIPAL_INR = 30000; // Fixed starting principal
+    const INITIAL_PRINCIPAL_INR = 50000; // Fixed starting principal (UPDATED to 50,000)
     const CURRENCY_SYMBOL = '₹';
     
     // --- Persistence Keys ---
     const START_DATE_KEY = 'longasia_start_date_ms';
     const PRINCIPAL_KEY = 'longasia_initial_principal';
 
-    // --- Continuous Growth Rate (Reverted to simple interest) ---
-    // Total Daily Profit: 50 INR (30000 * 5% / 30 days = 50)
-    const DAILY_PROFIT = 50; 
+    // --- Continuous Growth Rate ---
+    const MONTHLY_RATE = 0.05; // 5% per month
+    const DAYS_IN_MONTH = 30; // 30 days exactly
+    
+    // Calculated constants for current rate: (50000 * 0.05) / 30 = 83.3333... INR/day
+    const DAILY_PROFIT = (INITIAL_PRINCIPAL_INR * MONTHLY_RATE) / DAYS_IN_MONTH; 
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
     const PROFIT_PER_MS = DAILY_PROFIT / MS_PER_DAY; // Profit earned every millisecond
-    const DAYS_IN_MONTH = 30; // Used for projections
+
+    // --- Historical Context (60 days ago for 5000 profit) ---
+    const DAYS_IN_PAST = 60; // 5000 profit / 83.33 daily profit = 60 days
     
     // Global storage for dynamic values
     let START_DATE_MS = null;
@@ -435,7 +440,7 @@
 
         if (projectionChartInstance) {
             projectionChartInstance.data.labels = config.data.labels;
-            projectionChartInstance.data.datasets = config.data.datasets; 
+            projectionChartChartInstance.data.datasets = config.data.datasets; 
             projectionChartInstance.options.animation.duration = 0; 
             projectionChartInstance.update();
         } else {
@@ -481,20 +486,24 @@
         const savedPrincipal = localStorage.getItem(PRINCIPAL_KEY);
 
         const currentPrincipalCheck = savedPrincipal ? parseFloat(savedPrincipal) : 0;
+        
+        const today = new Date();
+        const pastDateMs = today.getTime() - (DAYS_IN_PAST * MS_PER_DAY); // 60 days ago
 
+        // Check if saved data exists AND if the saved principal matches the new principal (50000)
         if (savedStartMs && currentPrincipalCheck === INITIAL_PRINCIPAL_INR) {
             // Case 1: Persistent data exists and matches the current investment principal
             START_DATE_MS = parseInt(savedStartMs, 10);
             console.log("Loaded persistent start date from localStorage.");
         } else {
-            // Case 2: No data, or Principal was changed -> RESET START DATE
-            const todayMs = new Date().getTime();
-            START_DATE_MS = todayMs;
+            // Case 2: No data, or Principal was changed -> RESET START DATE to the required historical date
+            
+            START_DATE_MS = pastDateMs; // Set start date 60 days in the past
             
             // --- Ensure data is written immediately ---
-            localStorage.setItem(START_DATE_KEY, todayMs.toString());
+            localStorage.setItem(START_DATE_KEY, pastDateMs.toString());
             localStorage.setItem(PRINCIPAL_KEY, INITIAL_PRINCIPAL_INR.toString());
-            console.log("Initialized new persistent start date.");
+            console.log("Initialized new historical start date (60 days ago).");
         }
         
         // Start Simulation
@@ -503,7 +512,7 @@
 
         window.updateSimulation(); 
         
-        // --- FIX: Re-enable the 1-second continuous update for the ticker effect ---
+        // --- Re-enable the 1-second continuous update for the ticker effect ---
         setInterval(window.updateSimulation, 1000); 
     };
 
